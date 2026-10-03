@@ -1,9 +1,32 @@
 export default function Home() {
   return (
-    <main style={{ maxWidth: 880, margin: "0 auto", padding: 32 }}>
-      <h1>WhatsApp Commerce</h1>
-      <p>Next.js + Meta WhatsApp Cloud API starter.</p>
-      <p>Customer-initiated chat, opt-out enforcement, 24-hour window protection and template-safe outbound messaging are built into the API layer.</p>
+    <main className="shell" style={{ maxWidth: 760, paddingTop: 64 }}>
+      <div className="card stack">
+        <div>
+          <span className="pill">WhatsApp-first commerce</span>
+          <h1 className="title" style={{ marginTop: 12 }}>Store backend is running</h1>
+          <p className="muted">
+            Customer shopping happens inside WhatsApp. This web app hosts the bot,
+            webhooks, payments, database APIs and admin dashboard.
+          </p>
+        </div>
+
+        <div className="grid2">
+          <div className="card">
+            <strong>Customer flow</strong>
+            <p className="muted">Hi → Shop → Product → Cart → Address → Confirm → Pay → Order updates</p>
+          </div>
+          <div className="card">
+            <strong>Admin</strong>
+            <p className="muted">Products, stock, orders, customers and message logs.</p>
+            <a className="btn" style={{ display: "inline-block" }} href="/admin">Open Admin</a>
+          </div>
+        </div>
+
+        <p className="muted" style={{ fontSize: 13 }}>
+          Health endpoint: <code>/api/health</code>
+        </p>
+      </div>
     </main>
   );
 }
