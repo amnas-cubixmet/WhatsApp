@@ -47,9 +47,9 @@ export async function POST(req: Request) {
           waId,
           displayName,
           lastInboundAt: new Date(),
-          consentStatus: stop ? "OPTED_OUT" : "OPTED_IN",
-          consentSource: "customer_initiated_whatsapp",
-          consentAt: stop ? null : new Date(),
+          consentStatus: stop ? "OPTED_OUT" : "PENDING",
+          consentSource: null,
+          consentAt: null,
           optedOutAt: stop ? new Date() : null,
         },
         update: {
