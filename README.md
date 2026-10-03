@@ -20,7 +20,8 @@ Hi
 → Pincode
 → Review
 → CONFIRM
-→ Razorpay payment link
+→ Payment method: Online or Cash on Delivery
+→ Razorpay payment link for online orders
 → Payment webhook
 → Order confirmed
 → Admin status updates
@@ -270,3 +271,26 @@ Returns database connection status.
 ## Repository
 
 `amnas-cubixmet/WhatsApp`
+
+
+## Cash on Delivery
+
+Checkout supports both:
+
+- Online Payment
+- Cash on Delivery
+
+For COD orders:
+
+- No Razorpay payment link is created.
+- `paymentStatus` is stored as `COD`.
+- Order status becomes `CONFIRMED` immediately.
+- The customer receives the final amount payable on delivery in WhatsApp.
+
+Optional COD fee:
+
+```
+COD_FEE_PAISE="0"
+```
+
+Example: set `COD_FEE_PAISE="5000"` for a ₹50 COD fee.
