@@ -8,6 +8,7 @@ datasource db {
 }
 
 enum ConsentStatus {
+  PENDING
   OPTED_IN
   OPTED_OUT
 }
@@ -26,7 +27,7 @@ model Contact {
   id            String        @id @default(cuid())
   waId          String        @unique
   displayName   String?
-  consentStatus ConsentStatus @default(OPTED_IN)
+  consentStatus ConsentStatus @default(PENDING)
   consentSource String?
   consentAt     DateTime?
   optedOutAt    DateTime?
@@ -38,16 +39,16 @@ model Contact {
 }
 
 model MessageAudit {
-  id          String           @id @default(cuid())
-  contactId   String
-  direction   MessageDirection
-  kind        MessageKind
-  templateName String?
+  id            String           @id @default(cuid())
+  contactId     String
+  direction     MessageDirection
+  kind          MessageKind
+  templateName  String?
   metaMessageId String?
-  payload     Json?
-  status      String?
-  createdAt   DateTime         @default(now())
-  contact     Contact          @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  payload       Json?
+  status        String?
+  createdAt     DateTime         @default(now())
+  contact       Contact          @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
   @@index([contactId, createdAt])
 }
