@@ -49,12 +49,17 @@ export async function createOrderFromCart(input: {
   phone: string;
   addressLine: string;
   pincode: string;
+  paymentMethod: "ONLINE" | "COD";
 }) {
   const { cart, subtotalPaise } = await cartSummary(input.contactId);
   if (!cart.items.length) throw new Error("CART_EMPTY");
 
   const deliveryPaise = Number(process.env.DELIVERY_FEE_PAISE ?? "0");
-  const totalPaise = subtotalPaise + deliveryPaise;
+  const codFeePaise =
+    input.paymentMethod === "COD"
+      ? Number(process.env.COD_FEE_PAISE ?? "0")
+      : 0;
+  const totalPaise = subtotalPaise + deliveryPaise + codFeePaise;
 
   const order = await prisma.$transaction(async (tx) => {
     for (const item of cart.items) {
@@ -68,12 +73,18 @@ export async function createOrderFromCart(input: {
         orderNumber: makeOrderNumber(),
         contactId: input.contactId,
         subtotalPaise,
-        deliveryPaise,
+        deliveryPaise: deliveryPaise + codFeePaise,
         totalPaise,
         customerName: input.customerName,
         phone: input.phone,
         addressLine: input.addressLine,
         pincode: input.pincode,
+        paymentStatus: input.paymentMethod === "COD" ? "COD" : "PENDING",
+        status: input.paymentMethod === "COD" ? "CONFIRMED" : "PENDING_PAYMENT",
+        notes:
+          input.paymentMethod === "COD"
+            ? `Cash on Delivery${codFeePaise ? ` (COD fee: ${codFeePaise} paise)` : ""}`
+            : "Online payment",
         items: {
           create: cart.items.map((item) => ({
             productId: item.productId,
@@ -99,6 +110,15 @@ export async function createOrderFromCart(input: {
     return created;
   });
 
+  if (input.paymentMethod === "COD") {
+    return {
+      ...order,
+      razorpayLinkId: null,
+      razorpayLinkUrl: null,
+      paymentMethod: "COD" as const,
+    };
+  }
+
   try {
     const link = await createPaymentLink({
       orderNumber: order.orderNumber,
@@ -107,7 +127,7 @@ export async function createOrderFromCart(input: {
       phone: order.phone,
     });
 
-    return prisma.order.update({
+    const updated = await prisma.order.update({
       where: { id: order.id },
       data: {
         razorpayLinkId: link.id,
@@ -115,7 +135,15 @@ export async function createOrderFromCart(input: {
       },
       include: { items: true },
     });
+
+    return { ...updated, paymentMethod: "ONLINE" as const };
   } catch (error) {
-    return { ...order, razorpayLinkId: null, razorpayLinkUrl: null, paymentError: String(error) };
+    return {
+      ...order,
+      razorpayLinkId: null,
+      razorpayLinkUrl: null,
+      paymentError: String(error),
+      paymentMethod: "ONLINE" as const,
+    };
   }
 }
