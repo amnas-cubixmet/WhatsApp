@@ -456,7 +456,7 @@ Reply CONFIRM to place order or CANCEL to stop.`
       }
 
       if (text !== "confirm") {
-        await reply(input.contactId, input.waId, "Reply CONFIRM to place the order or CANCEL.");
+        await reply(input.contactId, input.waId, "Reply CONFIRM to continue or CANCEL.");
         return;
       }
 
@@ -465,15 +465,71 @@ Reply CONFIRM to place order or CANCEL to stop.`
         return showCart(input.contactId, input.waId);
       }
 
+      await setSession(input.contactId, "PAYMENT_METHOD", data);
+
+      const codFeePaise = Number(process.env.COD_FEE_PAISE ?? "0");
+
+      await reply(
+        input.contactId,
+        input.waId,
+        `Choose payment method:
+
+1 — Pay Online
+2 — Cash on Delivery${codFeePaise > 0 ? ` (+${formatInr(codFeePaise)} COD fee)` : ""}
+
+Reply 1 or 2.`
+      );
+      return;
+    }
+
+    case "PAYMENT_METHOD": {
+      if (!data.customerName || !data.addressLine || !data.pincode) {
+        await reply(input.contactId, input.waId, "Checkout data expired. Please start checkout again.");
+        return showCart(input.contactId, input.waId);
+      }
+
+      const paymentMethod =
+        text === "1" || text === "online"
+          ? "ONLINE"
+          : text === "2" || text === "cod" || text === "cash on delivery"
+            ? "COD"
+            : null;
+
+      if (!paymentMethod) {
+        await reply(
+          input.contactId,
+          input.waId,
+          "Choose 1 for Online Payment or 2 for Cash on Delivery."
+        );
+        return;
+      }
+
       const order = await createOrderFromCart({
         contactId: input.contactId,
         customerName: data.customerName,
         phone: input.waId,
         addressLine: data.addressLine,
         pincode: data.pincode,
+        paymentMethod,
       });
 
       await setSession(input.contactId, "MENU", {});
+
+      if (paymentMethod === "COD") {
+        await reply(
+          input.contactId,
+          input.waId,
+          `Cash on Delivery order confirmed ✅
+
+Order: ${order.orderNumber}
+Total payable on delivery: ${formatInr(order.totalPaise)}
+Payment: CASH ON DELIVERY
+Status: CONFIRMED
+
+We will send delivery updates on WhatsApp.`
+        );
+        return;
+      }
 
       if (order.razorpayLinkUrl) {
         await reply(
