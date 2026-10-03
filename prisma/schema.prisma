@@ -1,0 +1,72 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ConsentStatus {
+  OPTED_IN
+  OPTED_OUT
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageKind {
+  FREEFORM
+  TEMPLATE
+}
+
+model Contact {
+  id            String        @id @default(cuid())
+  waId          String        @unique
+  displayName   String?
+  consentStatus ConsentStatus @default(OPTED_IN)
+  consentSource String?
+  consentAt     DateTime?
+  optedOutAt    DateTime?
+  lastInboundAt DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  messages      MessageAudit[]
+  rateEvents    RateEvent[]
+}
+
+model MessageAudit {
+  id          String           @id @default(cuid())
+  contactId   String
+  direction   MessageDirection
+  kind        MessageKind
+  templateName String?
+  metaMessageId String?
+  payload     Json?
+  status      String?
+  createdAt   DateTime         @default(now())
+  contact     Contact          @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId, createdAt])
+}
+
+model RateEvent {
+  id        String   @id @default(cuid())
+  contactId String
+  createdAt DateTime @default(now())
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId, createdAt])
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  pricePaise  Int
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
