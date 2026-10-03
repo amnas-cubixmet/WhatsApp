@@ -50,7 +50,7 @@ Reply with:
 3️⃣ Support
 4️⃣ View cart
 
-You can type MENU anytime.`
+Commands: SHOP, CART, ORDERS, MENU`
   );
 }
 
@@ -134,6 +134,10 @@ Reply:
 1 — Checkout
 2 — Continue shopping
 3 — Clear cart
+
+Or:
+REMOVE 2
+QTY 1 3
 MENU — Main menu`
   );
 }
@@ -160,9 +164,47 @@ async function showOrders(contactId: string, waId: string) {
             `${o.orderNumber}\n${formatInr(o.totalPaise)} • ${o.paymentStatus} • ${o.status}`
         )
         .join("\n\n") +
-      "\n\nType MENU to return."
+      "\n\nTo buy the same items again, type:\nREORDER <order number>\n\nType MENU to return."
   );
   await setSession(contactId, "MENU", {});
+}
+
+async function reorder(contactId: string, waId: string, orderNumber: string) {
+  const order = await prisma.order.findFirst({
+    where: { contactId, orderNumber },
+    include: { items: true },
+  });
+
+  if (!order) {
+    await reply(contactId, waId, "Order not found.");
+    return;
+  }
+
+  let added = 0;
+  const skipped: string[] = [];
+
+  for (const item of order.items) {
+    if (!item.productId) {
+      skipped.push(item.productName);
+      continue;
+    }
+
+    try {
+      await addToCart(contactId, item.productId, item.quantity);
+      added += 1;
+    } catch {
+      skipped.push(item.productName);
+    }
+  }
+
+  await reply(
+    contactId,
+    waId,
+    `Reorder prepared ✅\nAdded: ${added} item(s)${
+      skipped.length ? `\nUnavailable/skipped: ${skipped.join(", ")}` : ""
+    }`
+  );
+  return showCart(contactId, waId);
 }
 
 function numberChoice(text: string, max: number) {
@@ -184,23 +226,15 @@ export async function handleIncomingMessage(input: {
   }
 
   if (["hi", "hello", "hey", "start", "menu"].includes(text)) {
-    await showMenu(input.contactId, input.waId);
-    return;
+    return showMenu(input.contactId, input.waId);
   }
 
-  if (text === "shop") {
-    await showCategories(input.contactId, input.waId);
-    return;
-  }
+  if (text === "shop") return showCategories(input.contactId, input.waId);
+  if (text === "cart") return showCart(input.contactId, input.waId);
+  if (text === "orders" || text === "my orders") return showOrders(input.contactId, input.waId);
 
-  if (text === "cart") {
-    await showCart(input.contactId, input.waId);
-    return;
-  }
-
-  if (text === "orders" || text === "my orders") {
-    await showOrders(input.contactId, input.waId);
-    return;
+  if (text.startsWith("reorder ")) {
+    return reorder(input.contactId, input.waId, raw.slice(8).trim());
   }
 
   const session = await prisma.conversationSession.upsert({
@@ -216,15 +250,24 @@ export async function handleIncomingMessage(input: {
       if (text === "1") return showCategories(input.contactId, input.waId);
       if (text === "2") return showOrders(input.contactId, input.waId);
       if (text === "3") {
-        await setSession(input.contactId, "MENU", {});
+        await setSession(input.contactId, "SUPPORT", {});
         return reply(
           input.contactId,
           input.waId,
-          `Human support requested ✅\nPlease describe your issue. Our team can review it in the admin panel.\n\nType MENU to return.`
+          "Human support requested ✅\nDescribe your issue in one message. It will be visible to the admin team.\n\nType MENU anytime to return."
         );
       }
       if (text === "4") return showCart(input.contactId, input.waId);
       return showMenu(input.contactId, input.waId);
+    }
+
+    case "SUPPORT": {
+      await reply(
+        input.contactId,
+        input.waId,
+        "Your support message was received ✅\nOur team can review it in the admin message log.\n\nSend another message if needed, or type MENU."
+      );
+      return;
     }
 
     case "SELECT_CATEGORY": {
@@ -300,6 +343,42 @@ export async function handleIncomingMessage(input: {
         if (cart) await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
         await reply(input.contactId, input.waId, "Cart cleared.");
         return showMenu(input.contactId, input.waId);
+      }
+
+      const removeMatch = raw.match(/^remove\s+(\d+)$/i);
+      if (removeMatch) {
+        const { cart } = await cartSummary(input.contactId);
+        const index = Number(removeMatch[1]) - 1;
+        const item = cart.items[index];
+        if (!item) {
+          await reply(input.contactId, input.waId, "Invalid cart item number.");
+          return showCart(input.contactId, input.waId);
+        }
+        await prisma.cartItem.delete({ where: { id: item.id } });
+        await reply(input.contactId, input.waId, `${item.product.name} removed from cart.`);
+        return showCart(input.contactId, input.waId);
+      }
+
+      const qtyMatch = raw.match(/^qty\s+(\d+)\s+(\d+)$/i);
+      if (qtyMatch) {
+        const { cart } = await cartSummary(input.contactId);
+        const index = Number(qtyMatch[1]) - 1;
+        const quantity = Number(qtyMatch[2]);
+        const item = cart.items[index];
+
+        if (!item || !Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
+          await reply(input.contactId, input.waId, "Use QTY <item number> <quantity>, for example QTY 1 2.");
+          return showCart(input.contactId, input.waId);
+        }
+
+        if (item.product.stockQty < quantity) {
+          await reply(input.contactId, input.waId, `Only ${item.product.stockQty} available.`);
+          return showCart(input.contactId, input.waId);
+        }
+
+        await prisma.cartItem.update({ where: { id: item.id }, data: { quantity } });
+        await reply(input.contactId, input.waId, "Quantity updated.");
+        return showCart(input.contactId, input.waId);
       }
 
       return showCart(input.contactId, input.waId);
