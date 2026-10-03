@@ -43,17 +43,19 @@ export async function assertOutboundAllowed(input: {
   kind: "FREEFORM" | "TEMPLATE";
 }) {
   const contact = await prisma.contact.findUnique({ where: { waId: input.waId } });
+  if (!contact) throw new Error("CONTACT_NOT_FOUND");
+  if (contact.consentStatus === "OPTED_OUT") throw new Error("CONTACT_OPTED_OUT");
 
-  if (!contact) {
-    throw new Error("CONTACT_NOT_FOUND");
-  }
+  const inside24h = withinCustomerServiceWindow(contact.lastInboundAt);
 
-  if (contact.consentStatus === "OPTED_OUT") {
-    throw new Error("CONTACT_OPTED_OUT");
-  }
-
-  if (input.kind === "FREEFORM" && !withinCustomerServiceWindow(contact.lastInboundAt)) {
+  // A normal reply is allowed only inside the customer-service window.
+  if (input.kind === "FREEFORM" && !inside24h) {
     throw new Error("TEMPLATE_REQUIRED_OUTSIDE_24H");
+  }
+
+  // Proactive messaging outside the service window requires a recorded explicit opt-in.
+  if (input.kind === "TEMPLATE" && !inside24h && contact.consentStatus !== "OPTED_IN") {
+    throw new Error("EXPLICIT_OPT_IN_REQUIRED");
   }
 
   // Conservative app-level throttle: max 20 outbound attempts/contact/hour.
@@ -61,10 +63,7 @@ export async function assertOutboundAllowed(input: {
   const recentCount = await prisma.rateEvent.count({
     where: { contactId: contact.id, createdAt: { gte: since } },
   });
-
-  if (recentCount >= 20) {
-    throw new Error("RATE_LIMITED");
-  }
+  if (recentCount >= 20) throw new Error("RATE_LIMITED");
 
   await prisma.rateEvent.create({ data: { contactId: contact.id } });
   return contact;
