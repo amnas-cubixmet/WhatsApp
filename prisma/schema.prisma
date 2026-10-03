@@ -23,6 +23,25 @@ enum MessageKind {
   TEMPLATE
 }
 
+enum OrderStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  PROCESSING
+  PACKED
+  SHIPPED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  COD
+}
+
 model Contact {
   id            String        @id @default(cuid())
   waId          String        @unique
@@ -34,8 +53,21 @@ model Contact {
   lastInboundAt DateTime?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+
   messages      MessageAudit[]
   rateEvents    RateEvent[]
+  cart          Cart?
+  session       ConversationSession?
+  orders        Order[]
+}
+
+model ConversationSession {
+  id        String   @id @default(cuid())
+  contactId String   @unique
+  state     String   @default("MENU")
+  data      Json?
+  updatedAt DateTime @updatedAt
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
 }
 
 model MessageAudit {
@@ -44,7 +76,7 @@ model MessageAudit {
   direction     MessageDirection
   kind          MessageKind
   templateName  String?
-  metaMessageId String?
+  metaMessageId String?          @unique
   payload       Json?
   status        String?
   createdAt     DateTime         @default(now())
@@ -62,12 +94,101 @@ model RateEvent {
   @@index([contactId, createdAt])
 }
 
+model Category {
+  id        String    @id @default(cuid())
+  name      String
+  slug      String    @unique
+  active    Boolean   @default(true)
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  products  Product[]
+}
+
 model Product {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
+  categoryId  String?
+  sku         String?   @unique
   name        String
   description String?
+  imageUrl    String?
   pricePaise  Int
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  stockQty    Int       @default(0)
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+
+  @@index([categoryId, active])
+}
+
+model Cart {
+  id        String     @id @default(cuid())
+  contactId String     @unique
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  contact   Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+}
+
+model CartItem {
+  id        String  @id @default(cuid())
+  cartId    String
+  productId String
+  quantity  Int     @default(1)
+  cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, productId])
+}
+
+model Order {
+  id              String        @id @default(cuid())
+  orderNumber     String        @unique
+  contactId       String
+  status          OrderStatus   @default(PENDING_PAYMENT)
+  paymentStatus   PaymentStatus @default(PENDING)
+  subtotalPaise   Int
+  deliveryPaise   Int           @default(0)
+  totalPaise      Int
+  customerName    String
+  phone           String
+  addressLine     String
+  pincode         String
+  razorpayLinkId  String?
+  razorpayLinkUrl String?
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  contact         Contact       @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  items           OrderItem[]
+  paymentEvents   PaymentEvent[]
+
+  @@index([contactId, createdAt])
+  @@index([status, createdAt])
+}
+
+model OrderItem {
+  id             String  @id @default(cuid())
+  orderId        String
+  productId      String?
+  productName    String
+  sku            String?
+  pricePaise     Int
+  quantity       Int
+  lineTotalPaise Int
+  order          Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product        Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+}
+
+model PaymentEvent {
+  id        String   @id @default(cuid())
+  orderId   String
+  eventId   String?  @unique
+  eventType String
+  payload   Json
+  createdAt DateTime @default(now())
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
